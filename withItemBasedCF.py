@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from sklearn.metrics import mean_squared_error
 from sklearn.metrics.pairwise import cosine_similarity
 
 def get_recommendations(userId, matrix, item_similarity, top_n):
@@ -11,7 +12,6 @@ def get_recommendations(userId, matrix, item_similarity, top_n):
     :param top_n: wanted number of recommendations
     :return: recommendation dictionary
     """
-
 
     user_ratings = matrix.loc[int(userId)] # get the series of wanted user's ratings
 
@@ -40,6 +40,48 @@ def get_recommendations(userId, matrix, item_similarity, top_n):
 
     recommendations = sorted(predictions.items(), key = lambda x: x[1], reverse = True)
     return recommendations[:int(top_n)]
+
+
+def calculate_rmse(ratings_df, matrix, item_similarity):
+    actuals = []
+    predictions = []
+
+    for index, row in ratings_df.iterrows():
+        user_id = row['userId']
+        item_id = row['movieId']
+        actual_rating = row['rating']
+
+        if user_id not in matrix.index or item_id not in item_similarity.columns:
+            continue
+
+        user_ratings = matrix.loc[user_id]
+        rated_items = user_ratings.dropna().index
+        rated_items = rated_items[rated_items != item_id] #removing the target movie fromm the list
+
+        if len(rated_items) == 0:
+            continue
+
+        valid_ratings = user_ratings[rated_items]
+        similarity_scores = item_similarity[item_id][rated_items]
+
+        positive_mask = similarity_scores > 0
+
+        if positive_mask.sum() == 0:
+            continue
+
+        numerator = np.dot(valid_ratings[positive_mask], similarity_scores[positive_mask])
+        denominator = similarity_scores[positive_mask].sum()
+
+        if denominator == 0:
+            continue
+
+        predicted_rating = numerator / denominator
+
+        actuals.append(actual_rating)
+        predictions.append(predicted_rating)
+
+    rmse = np.sqrt(mean_squared_error(actuals, predictions))
+    return rmse
 
 if __name__ == '__main__':
 
@@ -74,6 +116,9 @@ if __name__ == '__main__':
          for movie_id, score in recommendations:
             movie_name = movies[movies.movieId == movie_id].iloc[0, 1]
             print(f"Movie: {movie_name}     Predicted Rating: {score:.2f} ")
+
+         rmse_score = calculate_rmse(ratings, matrix, item_similarity)
+         print(f"Model RMSE Score: {rmse_score:.4f}\n")
 
        elif choice == '2':
 
